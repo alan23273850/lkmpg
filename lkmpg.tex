@@ -6,13 +6,7 @@
 
 % fancyhdr settings
 \usepackage{fancyhdr}
-\pagestyle{fancy}
-\fancyhf{}
-\lhead{\rightmark}
-\rhead{\thepage}
-\cfoot{The Linux Kernel Module Programming Guide}
-\renewcommand{\headrulewidth}{2pt}
-\renewcommand{\footrulewidth}{1pt}
+\usepackage{xparse}
 
 % tikz settings
 \usepackage{tikz}
@@ -48,8 +42,11 @@
 \begin{document}
 
 \maketitle
-
+\ifdefined\HCode
+% turn off TOC
+\else
 \tableofcontents
+\fi
 
 \section{Introduction}
 \label{sec:introduction}
@@ -73,10 +70,11 @@ Contributing in this way shows your support for free software and the LDP. If yo
 
 The Linux Kernel Module Programming Guide was originally written for the 2.2 kernels by Ori Pomerantz.
 Eventually, Ori no longer had time to maintain the document.
-After all, the Linux kernel is a fast moving target. Peter Jay Salzman took over maintenance and updated it for the 2.4 kernels.
+After all, the Linux kernel is a fast moving target.
+Peter Jay Salzman took over maintenance and updated it for the 2.4 kernels.
 Eventually, Peter no longer had time to follow developments with the 2.6 kernel, so Michael Burian became a co-maintainer to update the document for the 2.6 kernels.
 Bob Mottram updated the examples for 3.8+ kernels.
-Jim Huang upgraded to recent kernel versions (v5.x) and revise LaTeX scripts.
+Jim Huang upgraded to recent kernel versions (v5.x) and revised LaTeX scripts.
 
 \subsection{Acknowledgements}
 \label{sec:acknowledgements}
@@ -376,7 +374,7 @@ This and a few other macros describing the module are illustrated in the below e
 Modules can take command line arguments, but not with the argc/argv you might be used to.
 
 To allow arguments to be passed to your module, declare the variables that will take the values of the command line arguments as global and then use the module\_param() macro, (defined in linux/moduleparam.h) to set the mechanism up.
-At runtime, insmod will fill the variables with any command line arguments that are given, like ./insmod mymodule.ko myvariable=5.
+At runtime, insmod will fill the variables with any command line arguments that are given, like insmod ./mymodule.ko myvariable=5.
 The variable declarations and macros should be placed at the beginning of the module for clarity.
 The example code should clear up my admittedly lousy explanation.
 
@@ -414,20 +412,24 @@ I would recommend playing around with this code:
 \begin{code}
 $ sudo insmod hello-5.ko mystring="bebop" myintArray=-1
 myshort is a short integer: 1
-myint is an integer: 20
+myint is an integer: 420
 mylong is a long integer: 9999
 mystring is a string: bebop
-myintArray is -1 and 420
+myintArray[0] = -1
+myintArray[1] = 420
+got 1 arguments for myintArray.
 
 $ sudo rmmod hello-5
 Goodbye, world 5
 
 $ sudo insmod hello-5.ko mystring="supercalifragilisticexpialidocious" myintArray=-1,-1
 myshort is a short integer: 1
-myint is an integer: 20
+myint is an integer: 420
 mylong is a long integer: 9999
 mystring is a string: supercalifragilisticexpialidocious
-myintArray is -1 and -1
+myintArray[0] = -1
+myintArray[1] = -1
+got 2 arguments for myintArray.
 
 $ sudo rmmod hello-5
 Goodbye, world 5
@@ -552,27 +554,41 @@ CC      scripts/empty.o
 \end{verbatim}
 
 If you do not desire to actually compile the kernel, you can interrupt the build process (CTRL-C) just after the SPLIT line, because at that time, the files you need will be are ready.
-Now you can turn back to the directory of your module and compile it: It will be built exactly according your current kernel settings, and it will load into it without any errors.
+Now you can turn back to the directory of your module and compile it: It will be built exactly according to your current kernel settings, and it will load into it without any errors.
 
 \section{Preliminaries}
-\label{sec:org8c45a1a}
 \subsection{How modules begin and end}
-\label{sec:orgb317392}
-A program usually begins with a \textbf{main()} function, executes a bunch of instructions and terminates upon completion of those instructions. Kernel modules work a bit differently. A module always begin with either the init\_module or the function you specify with module\_init call. This is the entry function for modules; it tells the kernel what functionality the module provides and sets up the kernel to run the module's functions when they're needed. Once it does this, entry function returns and the module does nothing until the kernel wants to do something with the code that the module provides.
+\label{sec:module_init_exit}
+A program usually begins with a \textbf{main()} function, executes a bunch of instructions and terminates upon completion of those instructions.
+Kernel modules work a bit differently. A module always begin with either the init\_module or the function you specify with module\_init call.
+This is the entry function for modules; it tells the kernel what functionality the module provides and sets up the kernel to run the module's functions when they are needed.
+Once it does this, entry function returns and the module does nothing until the kernel wants to do something with the code that the module provides.
 
-All modules end by calling either \textbf{cleanup\_module} or the function you specify with the \textbf{module\_exit} call. This is the exit function for modules; it undoes whatever entry function did. It unregisters the functionality that the entry function registered.
+All modules end by calling either \textbf{cleanup\_module} or the function you specify with the \textbf{module\_exit} call.
+This is the exit function for modules; it undoes whatever entry function did.
+It unregisters the functionality that the entry function registered.
 
-Every module must have an entry function and an exit function. Since there's more than one way to specify entry and exit functions, I'll try my best to use the terms `entry function' and `exit function', but if I slip and simply refer to them as init\_module and cleanup\_module, I think you'll know what I mean.
+Every module must have an entry function and an exit function.
+Since there's more than one way to specify entry and exit functions, I'll try my best to use the terms ``entry function'' and ``exit function'', but if I slip and simply refer to them as init\_module and cleanup\_module, I think you'll know what I mean.
 
 \subsection{Functions available to modules}
-\label{sec:org9ebe27a}
-Programmers use functions they don't define all the time. A prime example of this is \textbf{printf()}. You use these library functions which are provided by the standard C library, libc. The definitions for these functions don't actually enter your program until the linking stage, which insures that the code (for printf() for example) is available, and fixes the call instruction to point to that code.
+\label{sec:avail_func}
+Programmers use functions they do not define all the time. A prime example of this is \textbf{printf()}.
+You use these library functions which are provided by the standard C library, libc.
+The definitions for these functions do not actually enter your program until the linking stage, which insures that the code (for printf() for example) is available, and fixes the call instruction to point to that code.
 
-Kernel modules are different here, too. In the hello world example, you might have noticed that we used a function, \textbf{pr\_info()} but didn't include a standard I/O library. That's because modules are object files whose symbols get resolved upon insmod'ing. The definition for the symbols comes from the kernel itself; the only external functions you can use are the ones provided by the kernel. If you're curious about what symbols have been exported by your kernel, take a look at \textbf{/proc/kallsyms}.
+Kernel modules are different here, too. In the hello world example, you might have noticed that we used a function, \textbf{pr\_info()} but did not include a standard I/O library.
+That is because modules are object files whose symbols get resolved upon insmod'ing.
+The definition for the symbols comes from the kernel itself; the only external functions you can use are the ones provided by the kernel.
+If you're curious about what symbols have been exported by your kernel, take a look at \textbf{/proc/kallsyms}.
 
-One point to keep in mind is the difference between library functions and system calls. Library functions are higher level, run completely in user space and provide a more convenient interface for the programmer to the functions that do the real work --- system calls. System calls run in kernel mode on the user's behalf and are provided by the kernel itself. The library function printf() may look like a very general printing function, but all it really does is format the data into strings and write the string data using the low-level system call write(), which then sends the data to standard output.
+One point to keep in mind is the difference between library functions and system calls. Library functions are higher level, run completely in user space and provide a more convenient interface for the programmer to the functions that do the real work --- system calls.
+System calls run in kernel mode on the user's behalf and are provided by the kernel itself.
+The library function printf() may look like a very general printing function, but all it really does is format the data into strings and write the string data using the low-level system call write(), which then sends the data to standard output.
 
-Would you like to see what system calls are made by printf()? It's easy! Compile the following program:
+Would you like to see what system calls are made by printf()?
+It is easy!
+Compile the following program:
 
 \begin{code}
 #include <stdio.h>
@@ -584,43 +600,85 @@ int main(void)
 }
 \end{code}
 
-with \textbf{gcc -Wall -o hello hello.c}. Run the exectable with \textbf{strace ./hello}. Are you impressed? Every line you see corresponds to a system call. \href{https://strace.io/}{strace} is a handy program that gives you details about what system calls a program is making, including which call is made, what its arguments are and what it returns. It's an invaluable tool for figuring out things like what files a program is trying to access. Towards the end, you'll see a line which looks like write (1, "hello", 5hello). There it is. The face behind the printf() mask. You may not be familiar with write, since most people use library functions for file I/O (like fopen, fputs, fclose). If that's the case, try looking at man 2 write. The 2nd man section is devoted to system calls (like kill() and read()). The 3rd man section is devoted to library calls, which you would probably be more familiar with (like cosh() and random()).
+with \textbf{gcc -Wall -o hello hello.c}.
+Run the exectable with \textbf{strace ./hello}.
+Are you impressed?
+Every line you see corresponds to a system call.
+\href{https://strace.io/}{strace} is a handy program that gives you details about what system calls a program is making, including which call is made, what its arguments are and what it returns.
+It is an invaluable tool for figuring out things like what files a program is trying to access.
+Towards the end, you will see a line which looks like \verb|write(1, "hello", 5hello)|.
+There it is.
+The face behind the printf() mask.
+You may not be familiar with write, since most people use library functions for file I/O (like fopen, fputs, fclose).
+If that is the case, try looking at man 2 write.
+The 2nd man section is devoted to system calls (like kill() and read()).
+The 3rd man section is devoted to library calls, which you would probably be more familiar with (like cosh() and random()).
 
-You can even write modules to replace the kernel's system calls, which we'll do shortly. Crackers often make use of this sort of thing for backdoors or trojans, but you can write your own modules to do more benign things, like have the kernel write Tee hee, that tickles! everytime someone tries to delete a file on your system.
+You can even write modules to replace the kernel's system calls, which we will do shortly.
+Crackers often make use of this sort of thing for backdoors or trojans, but you can write your own modules to do more benign things, like have the kernel write Tee hee, that tickles! everytime someone tries to delete a file on your system.
 
 \subsection{User Space vs Kernel Space}
-\label{sec:org547d7b8}
-A kernel is all about access to resources, whether the resource in question happens to be a video card, a hard drive or even memory. Programs often compete for the same resource. As I just saved this document, updatedb started updating the locate database. My vim session and updatedb are both using the hard drive concurrently. The kernel needs to keep things orderly, and not give users access to resources whenever they feel like it. To this end, a CPU can run in different modes. Each mode gives a different level of freedom to do what you want on the system. The Intel 80386 architecture had 4 of these modes, which were called rings. Unix uses only two rings; the highest ring (ring 0, also known as `supervisor mode' where everything is allowed to happen) and the lowest ring, which is called `user mode'.
+\label{sec:user_kernl_space}
+A kernel is all about access to resources, whether the resource in question happens to be a video card, a hard drive or even memory.
+Programs often compete for the same resource. As I just saved this document, updatedb started updating the locate database.
+My vim session and updatedb are both using the hard drive concurrently.
+The kernel needs to keep things orderly, and not give users access to resources whenever they feel like it.
+To this end, a CPU can run in different modes.
+Each mode gives a different level of freedom to do what you want on the system.
+The Intel 80386 architecture had 4 of these modes, which were called rings. Unix uses only two rings; the highest ring (ring 0, also known as ``supervisor mode'' where everything is allowed to happen) and the lowest ring, which is called ``user mode''.
 
-Recall the discussion about library functions vs system calls. Typically, you use a library function in user mode. The library function calls one or more system calls, and these system calls execute on the library function's behalf, but do so in supervisor mode since they are part of the kernel itself. Once the system call completes its task, it returns and execution gets transfered back to user mode.
+Recall the discussion about library functions vs system calls.
+Typically, you use a library function in user mode.
+The library function calls one or more system calls, and these system calls execute on the library function's behalf, but do so in supervisor mode since they are part of the kernel itself.
+Once the system call completes its task, it returns and execution gets transfered back to user mode.
 
 \subsection{Name Space}
-\label{sec:org81b5bd4}
-When you write a small C program, you use variables which are convenient and make sense to the reader. If, on the other hand, you're writing routines which will be part of a bigger problem, any global variables you have are part of a community of other peoples' global variables; some of the variable names can clash. When a program has lots of global variables which aren't meaningful enough to be distinguished, you get namespace pollution. In large projects, effort must be made to remember reserved names, and to find ways to develop a scheme for naming unique variable names and symbols.
+\label{sec:namespace}
+When you write a small C program, you use variables which are convenient and make sense to the reader.
+If, on the other hand, you are writing routines which will be part of a bigger problem, any global variables you have are part of a community of other peoples' global variables; some of the variable names can clash.
+When a program has lots of global variables which aren't meaningful enough to be distinguished, you get namespace pollution.
+In large projects, effort must be made to remember reserved names, and to find ways to develop a scheme for naming unique variable names and symbols.
 
-When writing kernel code, even the smallest module will be linked against the entire kernel, so this is definitely an issue. The best way to deal with this is to declare all your variables as static and to use a well-defined prefix for your symbols. By convention, all kernel prefixes are lowercase. If you don't want to declare everything as static, another option is to declare a symbol table and register it with a kernel. We'll get to this later.
+When writing kernel code, even the smallest module will be linked against the entire kernel, so this is definitely an issue.
+The best way to deal with this is to declare all your variables as static and to use a well-defined prefix for your symbols.
+By convention, all kernel prefixes are lowercase. If you do not want to declare everything as static, another option is to declare a symbol table and register it with a kernel.
+We will get to this later.
 
 The file \textbf{/proc/kallsyms} holds all the symbols that the kernel knows about and which are therefore accessible to your modules since they share the kernel's codespace.
 
 \subsection{Code space}
-\label{sec:orgc8229f4}
-Memory management is a very complicated subject and the majority of O'Reilly's "\emph{Understanding The Linux Kernel}" exclusively covers memory management! We're not setting out to be experts on memory managements, but we do need to know a couple of facts to even begin worrying about writing real modules.
+\label{sec:codespace}
+Memory management is a very complicated subject and the majority of O'Reilly's "\emph{Understanding The Linux Kernel}" exclusively covers memory management!
+We are not setting out to be experts on memory managements, but we do need to know a couple of facts to even begin worrying about writing real modules.
 
-If you haven't thought about what a segfault really means, you may be surprised to hear that pointers don't actually point to memory locations. Not real ones, anyway. When a process is created, the kernel sets aside a portion of real physical memory and hands it to the process to use for its executing code, variables, stack, heap and other things which a computer scientist would know about. This memory begins with 0x00000000 and extends up to whatever it needs to be. Since the memory space for any two processes don't overlap, every process that can access a memory address, say 0xbffff978, would be accessing a different location in real physical memory! The processes would be accessing an index named 0xbffff978 which points to some kind of offset into the region of memory set aside for that particular process. For the most part, a process like our Hello, World program can't access the space of another process, although there are ways which we'll talk about later.
+If you have not thought about what a segfault really means, you may be surprised to hear that pointers do not actually point to memory locations.
+Not real ones, anyway.
+When a process is created, the kernel sets aside a portion of real physical memory and hands it to the process to use for its executing code, variables, stack, heap and other things which a computer scientist would know about.
+This memory begins with 0x00000000 and extends up to whatever it needs to be.
+Since the memory space for any two processes do not overlap, every process that can access a memory address, say 0xbffff978, would be accessing a different location in real physical memory! The processes would be accessing an index named 0xbffff978 which points to some kind of offset into the region of memory set aside for that particular process.
+For the most part, a process like our Hello, World program can't access the space of another process, although there are ways which we will talk about later.
 
-The kernel has its own space of memory as well. Since a module is code which can be dynamically inserted and removed in the kernel (as opposed to a semi-autonomous object), it shares the kernel's codespace rather than having its own. Therefore, if your module segfaults, the kernel segfaults. And if you start writing over data because of an off-by-one error, then you're trampling on kernel data (or code). This is even worse than it sounds, so try your best to be careful.
+The kernel has its own space of memory as well. Since a module is code which can be dynamically inserted and removed in the kernel (as opposed to a semi-autonomous object), it shares the kernel's codespace rather than having its own.
+Therefore, if your module segfaults, the kernel segfaults.
+And if you start writing over data because of an off-by-one error, then you're trampling on kernel data (or code).
+This is even worse than it sounds, so try your best to be careful.
 
-By the way, I would like to point out that the above discussion is true for any operating system which uses a monolithic kernel. This isn't quite the same thing as \emph{"building all your modules into the kernel"}, although the idea is the same. There are things called microkernels which have modules which get their own codespace. The GNU Hurd and the Magenta kernel of Google Fuchsia are two examples of a microkernel.
+By the way, I would like to point out that the above discussion is true for any operating system which uses a monolithic kernel.
+This is not quite the same thing as \emph{"building all your modules into the kernel"}, although the idea is the same.
+There are things called microkernels which have modules which get their own codespace.
+The GNU Hurd and the Zircon kernel of Google Fuchsia are two examples of a microkernel.
 
 \subsection{Device Drivers}
-\label{sec:org578c01b}
-One class of module is the device driver, which provides functionality for hardware like a serial port. On Unix, each piece of hardware is represented by a file located in /dev named a device file which provides the means to communicate with the hardware. The device driver provides the communication on behalf of a user program. So the es1370.o sound card device driver might connect the /dev/sound device file to the Ensoniq IS1370 sound card. A userspace program like mp3blaster can use /dev/sound without ever knowing what kind of sound card is installed.
+\label{sec:device_drivers}
+One class of module is the device driver, which provides functionality for hardware like a serial port.
+On Unix, each piece of hardware is represented by a file located in /dev named a device file which provides the means to communicate with the hardware.
+The device driver provides the communication on behalf of a user program.
+So the es1370.ko sound card device driver might connect the /dev/sound device file to the Ensoniq IS1370 sound card.
+A userspace program like mp3blaster can use /dev/sound without ever knowing what kind of sound card is installed.
 
-\begin{enumerate}
-\item Major and Minor Numbers
-\label{sec:org63bb013}
-
-Let's look at some device files. Here are device files which represent the first three partitions on the primary master IDE hard drive:
+Let's look at some device files.
+% FIXME: use popular devices
+Here are device files which represent the first three partitions on the primary master IDE hard drive:
 
 \begin{verbatim}
 $ ls -l /dev/hda[1-3]
@@ -629,11 +687,23 @@ brw-rw----  1 root  disk  3, 2 Jul  5  2000 /dev/hda2
 brw-rw----  1 root  disk  3, 3 Jul  5  2000 /dev/hda3
 \end{verbatim}
 
-Notice the column of numbers separated by a comma. The first number is called the device's major number. The second number is the minor number. The major number tells you which driver is used to access the hardware. Each driver is assigned a unique major number; all device files with the same major number are controlled by the same driver. All the above major numbers are 3, because they're all controlled by the same driver.
+Notice the column of numbers separated by a comma.
+The first number is called the device's major number.
+The second number is the minor number. The major number tells you which driver is used to access the hardware.
+Each driver is assigned a unique major number; all device files with the same major number are controlled by the same driver.
+All the above major numbers are 3, because they're all controlled by the same driver.
 
-The minor number is used by the driver to distinguish between the various hardware it controls. Returning to the example above, although all three devices are handled by the same driver they have unique minor numbers because the driver sees them as being different pieces of hardware.
+The minor number is used by the driver to distinguish between the various hardware it controls.
+Returning to the example above, although all three devices are handled by the same driver they have unique minor numbers because the driver sees them as being different pieces of hardware.
 
-Devices are divided into two types: character devices and block devices. The difference is that block devices have a buffer for requests, so they can choose the best order in which to respond to the requests. This is important in the case of storage devices, where it's faster to read or write sectors which are close to each other, rather than those which are further apart. Another difference is that block devices can only accept input and return output in blocks (whose size can vary according to the device), whereas character devices are allowed to use as many or as few bytes as they like. Most devices in the world are character, because they don't need this type of buffering, and they don't operate with a fixed block size. You can tell whether a device file is for a block device or a character device by looking at the first character in the output of ls -l. If it's `b' then it's a block device, and if it's `c' then it's a character device. The devices you see above are block devices. Here are some character devices (the serial ports):
+Devices are divided into two types: character devices and block devices.
+The difference is that block devices have a buffer for requests, so they can choose the best order in which to respond to the requests.
+This is important in the case of storage devices, where it is faster to read or write sectors which are close to each other, rather than those which are further apart.
+Another difference is that block devices can only accept input and return output in blocks (whose size can vary according to the device), whereas character devices are allowed to use as many or as few bytes as they like.
+Most devices in the world are character, because they don't need this type of buffering, and they don't operate with a fixed block size.
+You can tell whether a device file is for a block device or a character device by looking at the first character in the output of ls -l.
+If it is `b' then it is a block device, and if it is `c' then it is a character device.
+The devices you see above are block devices. Here are some character devices (the serial ports):
 
 \begin{verbatim}
 crw-rw----  1 root  dial 4, 64 Feb 18 23:34 /dev/ttyS0
@@ -642,13 +712,24 @@ crw-rw----  1 root  dial 4, 66 Jul  5  2000 /dev/ttyS2
 crw-rw----  1 root  dial 4, 67 Jul  5  2000 /dev/ttyS3
 \end{verbatim}
 
-If you want to see which major numbers have been assigned, you can look at /usr/src/linux/Documentation/devices.txt.
+% FIXME: use the appropriate entries for device drivers
+If you want to see which major numbers have been assigned, you can look at \verb|Documentation/devices.txt|.
 
-When the system was installed, all of those device files were created by the mknod command. To create a new char device named `coffee' with major/minor number 12 and 2, simply do mknod /dev/coffee c 12 2. You don't have to put your device files into /dev, but it's done by convention. Linus put his device files in /dev, and so should you. However, when creating a device file for testing purposes, it's probably OK to place it in your working directory where you compile the kernel module. Just be sure to put it in the right place when you're done writing the device driver.
+When the system was installed, all of those device files were created by the mknod command.
+To create a new char device named `coffee' with major/minor number 12 and 2, simply do mknod /dev/coffee c 12 2.
+You do not have to put your device files into /dev, but it is done by convention.
+Linus put his device files in /dev, and so should you.
+However, when creating a device file for testing purposes, it is probably OK to place it in your working directory where you compile the kernel module.
+Just be sure to put it in the right place when you're done writing the device driver.
 
-I would like to make a few last points which are implicit from the above discussion, but I'd like to make them explicit just in case. When a device file is accessed, the kernel uses the major number of the file to determine which driver should be used to handle the access. This means that the kernel doesn't really need to use or even know about the minor number. The driver itself is the only thing that cares about the minor number. It uses the minor number to distinguish between different pieces of hardware.
+I would like to make a few last points which are implicit from the above discussion, but I would like to make them explicit just in case.
+When a device file is accessed, the kernel uses the major number of the file to determine which driver should be used to handle the access.
+This means that the kernel doesn't really need to use or even know about the minor number.
+The driver itself is the only thing that cares about the minor number.
+It uses the minor number to distinguish between different pieces of hardware.
 
-By the way, when I say \emph{"hardware"}, I mean something a bit more abstract than a PCI card that you can hold in your hand. Look at these two device files:
+By the way, when I say \emph{"hardware"}, I mean something a bit more abstract than a PCI card that you can hold in your hand.
+Look at these two device files:
 
 \begin{verbatim}
 $ ls -l /dev/sda /dev/sdb
@@ -656,16 +737,20 @@ brw-rw---- 1 root disk 8,  0 Jan  3 09:02 /dev/sda
 brw-rw---- 1 root disk 8, 16 Jan  3 09:02 /dev/sdb
 \end{verbatim}
 
-By now you can look at these two device files and know instantly that they are block devices and are handled by same driver (block major 8). Sometimes two device files with the same major but different minor number can actually represent the same piece of physical hardware. So just be aware that the word "hardware" in our discussion can mean something very abstract.
-\end{enumerate}
+By now you can look at these two device files and know instantly that they are block devices and are handled by same driver (block major 8).
+Sometimes two device files with the same major but different minor number can actually represent the same piece of physical hardware.
+So just be aware that the word ``hardware'' in our discussion can mean something very abstract.
 
 \section{Character Device drivers}
-\label{sec:orgd3ad4b9}
+\label{sec:chardev}
 \subsection{The proc\_ops Structure}
-\label{sec:org3950990}
-The proc\_ops structure is defined in \textbf{/usr/include/linux/fs.h}, and holds pointers to functions defined by the driver that perform various operations on the device. Each field of the structure corresponds to the address of some function defined by the driver to handle a requested operation.
+\label{sec:proc_ops}
+The \verb|proc_ops| structure is defined in \textbf{/usr/include/linux/fs.h}, and holds pointers to functions defined by the driver that perform various operations on the device.
+Each field of the structure corresponds to the address of some function defined by the driver to handle a requested operation.
 
-For example, every character driver needs to define a function that reads from the device. The proc\_ops structure holds the address of the module's function that performs that operation. Here is what the definition looks like for kernel 3.0:
+For example, every character driver needs to define a function that reads from the device.
+The \verb|proc_ops| structure holds the address of the module's function that performs that operation.
+Here is what the definition looks like for kernel 3.0:
 
 \begin{code}
 struct proc_ops {
@@ -700,9 +785,13 @@ struct proc_ops {
 };
 \end{code}
 
-Some operations are not implemented by a driver. For example, a driver that handles a video card won't need to read from a directory structure. The corresponding entries in the proc\_ops structure should be set to NULL.
+Some operations are not implemented by a driver.
+For example, a driver that handles a video card will not need to read from a directory structure.
+The corresponding entries in the \verb|proc_ops| structure should be set to NULL.
 
-There is a gcc extension that makes assigning to this structure more convenient. You'll see it in modern drivers, and may catch you by surprise. This is what the new way of assigning to the structure looks like:
+There is a gcc extension that makes assigning to this structure more convenient.
+You will see it in modern drivers, and may catch you by surprise.
+This is what the new way of assigning to the structure looks like:
 
 \begin{code}
 struct proc_ops fops = {
@@ -713,7 +802,9 @@ struct proc_ops fops = {
 };
 \end{code}
 
-However, there's also a C99 way of assigning to elements of a structure, and this is definitely preferred over using the GNU extension. The version of gcc the author used when writing this, 2.95, supports the new C99 syntax. You should use this syntax in case someone wants to port your driver. It will help with compatibility:
+However, there is also a C99 way of assigning to elements of a structure, \href{https://gcc.gnu.org/onlinedocs/gcc/Designated-Inits.html}{designated initializers}, and this is definitely preferred over using the GNU extension.
+You should use this syntax in case someone wants to port your driver.
+It will help with compatibility:
 
 \begin{code}
 struct proc_ops fops = {
@@ -724,87 +815,138 @@ struct proc_ops fops = {
 };
 \end{code}
 
-The meaning is clear, and you should be aware that any member of the structure which you don't explicitly assign will be initialized to NULL by gcc.
+The meaning is clear, and you should be aware that any member of the structure which you do not explicitly assign will be initialized to NULL by gcc.
 
 An instance of struct proc\_ops containing pointers to functions that are used to implement read, write, open, \ldots{} syscalls is commonly named fops.
 
 \subsection{The file structure}
-\label{sec:org8eca273}
+\label{sec:file_struct}
 
-Each device is represented in the kernel by a file structure, which is defined in \textbf{linux/fs.h}. Be aware that a file is a kernel level structure and never appears in a user space program. It's not the same thing as a \textbf{FILE}, which is defined by glibc and would never appear in a kernel space function. Also, its name is a bit misleading; it represents an abstract open `file', not a file on a disk, which is represented by a structure named inode.
+Each device is represented in the kernel by a file structure, which is defined in \textbf{linux/fs.h}.
+Be aware that a file is a kernel level structure and never appears in a user space program.
+It is not the same thing as a \textbf{FILE}, which is defined by glibc and would never appear in a kernel space function.
+Also, its name is a bit misleading; it represents an abstract open `file', not a file on a disk, which is represented by a structure named inode.
 
-An instance of struct file is commonly named filp. You'll also see it refered to as struct file file. Resist the temptation.
+An instance of struct file is commonly named filp. You'll also see it refered to as struct file file.
+Resist the temptation.
 
-Go ahead and look at the definition of file. Most of the entries you see, like struct dentry aren't used by device drivers, and you can ignore them. This is because drivers don't fill file directly; they only use structures contained in file which are created elsewhere.
+Go ahead and look at the definition of file.
+Most of the entries you see, like struct dentry are not used by device drivers, and you can ignore them.
+This is because drivers do not fill file directly; they only use structures contained in file which are created elsewhere.
 
 \subsection{Registering A Device}
-\label{sec:org64e0a84}
-As discussed earlier, char devices are accessed through device files, usually located in /dev. This is by convention. When writing a driver, it's OK to put the device file in your current directory. Just make sure you place it in /dev for a production driver. The major number tells you which driver handles which device file. The minor number is used only by the driver itself to differentiate which device it's operating on, just in case the driver handles more than one device.
+\label{sec:register_device}
+As discussed earlier, char devices are accessed through device files, usually located in /dev.
+This is by convention. When writing a driver, it is OK to put the device file in your current directory.
+Just make sure you place it in /dev for a production driver.
+The major number tells you which driver handles which device file.
+The minor number is used only by the driver itself to differentiate which device it is operating on, just in case the driver handles more than one device.
 
-Adding a driver to your system means registering it with the kernel. This is synonymous with assigning it a major number during the module's initialization. You do this by using the register\_chrdev function, defined by linux/fs.h.
+Adding a driver to your system means registering it with the kernel.
+This is synonymous with assigning it a major number during the module's initialization.
+You do this by using the \verb|register_chrdev| function, defined by linux/fs.h.
 
 \begin{code}
 int register_chrdev(unsigned int major, const char *name, struct proc_ops *fops);
 \end{code}
 
-where unsigned int major is the major number you want to request, \emph{const char *name} is the name of the device as it'll appear in \textbf{/proc/devices} and \emph{struct proc\_ops *fops} is a pointer to the proc\_ops table for your driver. A negative return value means the registration failed. Note that we didn't pass the minor number to register\_chrdev. That's because the kernel doesn't care about the minor number; only our driver uses it.
+where unsigned int major is the major number you want to request, \emph{const char *name} is the name of the device as it will appear in \textbf{/proc/devices} and \emph{struct proc\_ops *fops} is a pointer to the proc\_ops table for your driver.
+A negative return value means the registration failed. Note that we didn't pass the minor number to register\_chrdev.
+That is because the kernel doesn't care about the minor number; only our driver uses it.
 
-Now the question is, how do you get a major number without hijacking one that's already in use? The easiest way would be to look through Documentation /devices.txt and pick an unused one. That's a bad way of doing things because you'll never be sure if the number you picked will be assigned later. The answer is that you can ask the kernel to assign you a dynamic major number.
+Now the question is, how do you get a major number without hijacking one that's already in use?
+% FIXME: use the correct entry of Documentation
+The easiest way would be to look through Documentation /devices.txt and pick an unused one.
+That is a bad way of doing things because you will never be sure if the number you picked will be assigned later.
+The answer is that you can ask the kernel to assign you a dynamic major number.
 
-If you pass a major number of 0 to register\_chrdev, the return value will be the dynamically allocated major number. The downside is that you can't make a device file in advance, since you don't know what the major number will be. There are a couple of ways to do this. First, the driver itself can print the newly assigned number and we can make the device file by hand. Second, the newly registered device will have an entry in \textbf{/proc/devices}, and we can either make the device file by hand or write a shell script to read the file in and make the device file. The third method is we can have our driver make the the device file using the \textbf{device\_create} function after a successful registration and \textbf{device\_destroy} during the call to cleanup\_module.
+If you pass a major number of 0 to \verb|register_chrdev|, the return value will be the dynamically allocated major number.
+The downside is that you can not make a device file in advance, since you don't know what the major number will be.
+There are a couple of ways to do this.
+First, the driver itself can print the newly assigned number and we can make the device file by hand.
+Second, the newly registered device will have an entry in \textbf{/proc/devices}, and we can either make the device file by hand or write a shell script to read the file in and make the device file.
+The third method is we can have our driver make the the device file using the \textbf{device\_create} function after a successful registration and \textbf{device\_destroy} during the call to cleanup\_module.
 
 \subsection{Unregistering A Device}
-\label{sec:org9c60028}
-We can't allow the kernel module to be rmmod'ed whenever root feels like it. If the device file is opened by a process and then we remove the kernel module, using the file would cause a call to the memory location where the appropriate function (read/write) used to be. If we're lucky, no other code was loaded there, and we'll get an ugly error message. If we're unlucky, another kernel module was loaded into the same location, which means a jump into the middle of another function within the kernel. The results of this would be impossible to predict, but they can't be very positive.
+\label{sec:unregister_device}
+We can not allow the kernel module to be rmmod'ed whenever root feels like it.
+If the device file is opened by a process and then we remove the kernel module, using the file would cause a call to the memory location where the appropriate function (read/write) used to be.
+If we are lucky, no other code was loaded there, and we'll get an ugly error message.
+If we are unlucky, another kernel module was loaded into the same location, which means a jump into the middle of another function within the kernel.
+The results of this would be impossible to predict, but they can not be very positive.
 
-Normally, when you don't want to allow something, you return an error code (a negative number) from the function which is supposed to do it. With cleanup\_module that's impossible because it's a void function. However, there's a counter which keeps track of how many processes are using your module. You can see what it's value is by looking at the 3rd field of \textbf{/proc/modules}. If this number isn't zero, rmmod will fail. Note that you don't have to check the counter from within cleanup\_module because the check will be performed for you by the system call sys\_delete\_module, defined in \textbf{linux/module.c}. You shouldn't use this counter directly, but there are functions defined in \textbf{linux/module.h} which let you increase, decrease and display this counter:
+Normally, when you don't want to allow something, you return an error code (a negative number) from the function which is supposed to do it.
+With cleanup\_module that's impossible because it is a void function.
+However, there is a counter which keeps track of how many processes are using your module.
+You can see what its value is by looking at the 3rd field of \textbf{/proc/modules}.
+If this number isn't zero, rmmod will fail. Note that you don't have to check the counter from within cleanup\_module because the check will be performed for you by the system call sys\_delete\_module, defined in \textbf{linux/module.c}.
+You should not use this counter directly, but there are functions defined in \textbf{linux/module.h} which let you increase, decrease and display this counter:
 
 \begin{itemize}
 \item try\_module\_get(THIS\_MODULE): Increment the use count.
 \item module\_put(THIS\_MODULE): Decrement the use count.
 \end{itemize}
 
-It's important to keep the counter accurate; if you ever do lose track of the correct usage count, you'll never be able to unload the module; it's now reboot time, boys and girls. This is bound to happen to you sooner or later during a module's development.
+It is important to keep the counter accurate; if you ever do lose track of the correct usage count, you will never be able to unload the module; it's now reboot time, boys and girls.
+This is bound to happen to you sooner or later during a module's development.
 
 \subsection{chardev.c}
 \label{sec:org7ce767e}
-The next code sample creates a char driver named chardev. You can cat its device file.
+The next code sample creates a char driver named chardev.
+You can cat its device file.
 
 \begin{codebash}
 cat /proc/devices
 \end{codebash}
 
-(or open the file with a program) and the driver will put the number of times the device file has been read from into the file. We don't support writing to the file (like \textbf{echo "hi" > /dev/hello}), but catch these attempts and tell the user that the operation isn't supported. Don't worry if you don't see what we do with the data we read into the buffer; we don't do much with it. We simply read in the data and print a message acknowledging that we received it.
+(or open the file with a program) and the driver will put the number of times the device file has been read from into the file.
+We do not support writing to the file (like \textbf{echo "hi" > /dev/hello}), but catch these attempts and tell the user that the operation is not supported.
+Don't worry if you don't see what we do with the data we read into the buffer; we don't do much with it.
+We simply read in the data and print a message acknowledging that we received it.
 
 \samplec{examples/chardev.c}
 
 \subsection{Writing Modules for Multiple Kernel Versions}
-\label{sec:org6b50b84}
-The system calls, which are the major interface the kernel shows to the processes, generally stay the same across versions. A new system call may be added, but usually the old ones will behave exactly like they used to. This is necessary for backward compatibility -- a new kernel version is not supposed to break regular processes. In most cases, the device files will also remain the same. On the other hand, the internal interfaces within the kernel can and do change between versions.
+\label{sec:modules_for_versions}
+The system calls, which are the major interface the kernel shows to the processes, generally stay the same across versions.
+A new system call may be added, but usually the old ones will behave exactly like they used to.
+This is necessary for backward compatibility -- a new kernel version is not supposed to break regular processes.
+In most cases, the device files will also remain the same. On the other hand, the internal interfaces within the kernel can and do change between versions.
 
-The Linux kernel versions are divided between the stable versions (n.\$<\(even number\)>\$.m) and the development versions (n.\$<\(odd number\)>\$.m). The development versions include all the cool new ideas, including those which will be considered a mistake, or reimplemented, in the next version. As a result, you can't trust the interface to remain the same in those versions (which is why I don't bother to support them in this book, it's too much work and it would become dated too quickly). In the stable versions, on the other hand, we can expect the interface to remain the same regardless of the bug fix version (the m number).
+There are differences between different kernel versions, and if you want to support multiple kernel versions, you will find yourself having to code conditional compilation directives.
+The way to do this to compare the macro \verb|LINUX_VERSION_CODE| to the macro \verb|KERNEL_VERSION|.
+In version a.b.c of the kernel, the value of this macro would be \(2^{16}a+2^{8}b+c\).
 
-There are differences between different kernel versions, and if you want to support multiple kernel versions, you'll find yourself having to code conditional compilation directives. The way to do this to compare the macro LINUX\_VERSION\_CODE to the macro KERNEL\_VERSION. In version a.b.c of the kernel, the value of this macro would be \(2^{16}a+2^{8}b+c\).
-
-While previous versions of this guide showed how you can write backward compatible code with such constructs in great detail, we decided to break with this tradition for the better. People interested in doing such might now use a LKMPG with a version matching to their kernel. We decided to version the LKMPG like the kernel, at least as far as major and minor number are concerned. We use the patchlevel for our own versioning so use LKMPG version 2.4.x for kernels 2.4.x, use LKMPG version 2.6.x for kernels 2.6.x and so on. Also make sure that you always use current, up to date versions of both, kernel and guide.
-
-You might already have noticed that recent kernels look different. In case you haven't they look like 2.6.x.y now. The meaning of the first three items basically stays the same, but a subpatchlevel has been added and will indicate security fixes till the next stable patchlevel is out. So people can choose between a stable tree with security updates and use the latest kernel as developer tree. Search the kernel mailing list archives if you're interested in the full story.
+While previous versions of this guide showed how you can write backward compatible code with such constructs in great detail, we decided to break with this tradition for the better.
+People interested in doing such might now use a LKMPG with a version matching to their kernel.
 
 \section{The /proc File System}
-\label{sec:orgc6c4625}
-In Linux, there is an additional mechanism for the kernel and kernel modules to send information to processes --- the \textbf{/proc} file system. Originally designed to allow easy access to information about processes (hence the name), it is now used by every bit of the kernel which has something interesting to report, such as \textbf{/proc/modules} which provides the list of modules and \textbf{/proc/meminfo} which stats memory usage statistics.
+\label{sec:procfs}
+In Linux, there is an additional mechanism for the kernel and kernel modules to send information to processes --- the \textbf{/proc} file system.
+Originally designed to allow easy access to information about processes (hence the name), it is now used by every bit of the kernel which has something interesting to report, such as \textbf{/proc/modules} which provides the list of modules and \textbf{/proc/meminfo} which stats memory usage statistics.
 
-The method to use the proc file system is very similar to the one used with device drivers --- a structure is created with all the information needed for the \textbf{/proc} file, including pointers to any handler functions (in our case there is only one, the one called when somebody attempts to read from the \textbf{/proc} file). Then, init\_module registers the structure with the kernel and cleanup\_module unregisters it.
+The method to use the proc file system is very similar to the one used with device drivers --- a structure is created with all the information needed for the \textbf{/proc} file, including pointers to any handler functions (in our case there is only one, the one called when somebody attempts to read from the \textbf{/proc} file).
+Then, init\_module registers the structure with the kernel and cleanup\_module unregisters it.
 
-Normal file systems are located on a disk, rather than just in memory (which is where \textbf{/proc} is), and in that case the inode number is a pointer to a disk location where the file's index-node (inode for short) is located. The inode contains information about the file, for example the file's permissions, together with a pointer to the disk location or locations where the file's data can be found.
+Normal file systems are located on a disk, rather than just in memory (which is where \textbf{/proc} is), and in that case the inode number is a pointer to a disk location where the file's index-node (inode for short) is located.
+The inode contains information about the file, for example the file's permissions, together with a pointer to the disk location or locations where the file's data can be found.
 
 Because we don't get called when the file is opened or closed, there's nowhere for us to put try\_module\_get and try\_module\_put in this module, and if the file is opened and then the module is removed, there's no way to avoid the consequences.
 
-Here a simple example showing how to use a \textbf{/proc} file. This is the HelloWorld for the \textbf{/proc} filesystem. There are three parts: create the file \textbf{\emph{proc} helloworld} in the function init\_module, return a value (and a buffer) when the file \textbf{/proc/helloworld} is read in the callback function \textbf{procfile\_read}, and delete the file \textbf{/proc/helloworld} in the function cleanup\_module.
+Here a simple example showing how to use a \textbf{/proc} file.
+This is the HelloWorld for the \textbf{/proc} filesystem.
+There are three parts: create the file \textbf{/proc/helloworld} in the function init\_module, return a value (and a buffer) when the file \textbf{/proc/helloworld} is read in the callback function \textbf{procfile\_read}, and delete the file \textbf{/proc/helloworld} in the function cleanup\_module.
 
-The \textbf{/proc/helloworld} is created when the module is loaded with the function \textbf{proc\_create}. The return value is a \textbf{struct proc\_dir\_entry} , and it will be used to configure the file \textbf{/proc/helloworld} (for example, the owner of this file). A null return value means that the creation has failed.
+The \textbf{/proc/helloworld} is created when the module is loaded with the function \textbf{proc\_create}.
+The return value is a \textbf{struct proc\_dir\_entry} , and it will be used to configure the file \textbf{/proc/helloworld} (for example, the owner of this file).
+A null return value means that the creation has failed.
 
-Each time, everytime the file \textbf{/proc/helloworld} is read, the function \textbf{procfile\_read} is called. Two parameters of this function are very important: the buffer (the first parameter) and the offset (the third one). The content of the buffer will be returned to the application which read it (for example the cat command). The offset is the current position in the file. If the return value of the function isn't null, then this function is called again. So be careful with this function, if it never returns zero, the read function is called endlessly.
+Each time, everytime the file \textbf{/proc/helloworld} is read, the function \textbf{procfile\_read} is called.
+Two parameters of this function are very important: the buffer (the second parameter) and the offset (the fourth one).
+The content of the buffer will be returned to the application which read it (for example the cat command).
+The offset is the current position in the file.
+If the return value of the function is not null, then this function is called again.
+So be careful with this function, if it never returns zero, the read function is called endlessly.
 
 \begin{verbatim}
 $ cat /proc/helloworld
@@ -814,45 +956,75 @@ HelloWorld!
 \samplec{examples/procfs1.c}
 
 \subsection{Read and Write a /proc File}
-\label{sec:org6ba52b3}
-We have seen a very simple example for a /proc file where we only read the file /proc/helloworld. It's also possible to write in a /proc file. It works the same way as read, a function is called when the /proc file is written. But there is a little difference with read, data comes from user, so you have to import data from user space to kernel space (with copy\_from\_user or get\_user)
+\label{sec:read_write_procfs}
+We have seen a very simple example for a /proc file where we only read the file /proc/helloworld.
+It is also possible to write in a /proc file.
+It works the same way as read, a function is called when the /proc file is written.
+But there is a little difference with read, data comes from user, so you have to import data from user space to kernel space (with copy\_from\_user or get\_user)
 
-The reason for copy\_from\_user or get\_user is that Linux memory (on Intel architecture, it may be different under some other processors) is segmented. This means that a pointer, by itself, does not reference a unique location in memory, only a location in a memory segment, and you need to know which memory segment it is to be able to use it. There is one memory segment for the kernel, and one for each of the processes.
+The reason for copy\_from\_user or get\_user is that Linux memory (on Intel architecture, it may be different under some other processors) is segmented.
+This means that a pointer, by itself, does not reference a unique location in memory, only a location in a memory segment, and you need to know which memory segment it is to be able to use it.
+There is one memory segment for the kernel, and one for each of the processes.
 
-The only memory segment accessible to a process is its own, so when writing regular programs to run as processes, there's no need to worry about segments. When you write a kernel module, normally you want to access the kernel memory segment, which is handled automatically by the system. However, when the content of a memory buffer needs to be passed between the currently running process and the kernel, the kernel function receives a pointer to the memory buffer which is in the process segment. The put\_user and get\_user macros allow you to access that memory. These functions handle only one caracter, you can handle several caracters with copy\_to\_user and copy\_from\_user. As the buffer (in read or write function) is in kernel space, for write function you need to import data because it comes from user space, but not for the read function because data is already in kernel space.
+The only memory segment accessible to a process is its own, so when writing regular programs to run as processes, there is no need to worry about segments.
+When you write a kernel module, normally you want to access the kernel memory segment, which is handled automatically by the system.
+However, when the content of a memory buffer needs to be passed between the currently running process and the kernel, the kernel function receives a pointer to the memory buffer which is in the process segment.
+The put\_user and get\_user macros allow you to access that memory.
+These functions handle only one character, you can handle several characters with copy\_to\_user and copy\_from\_user.
+As the buffer (in read or write function) is in kernel space, for write function you need to import data because it comes from user space, but not for the read function because data is already in kernel space.
 
 \samplec{examples/procfs2.c}
 
 \subsection{Manage /proc file with standard filesystem}
-\label{sec:org3d7029a}
-We have seen how to read and write a /proc file with the /proc interface. But it's also possible to manage /proc file with inodes. The main concern is to use advanced functions, like permissions.
+\label{sec:manage_procfs}
+We have seen how to read and write a /proc file with the /proc interface.
+But it is also possible to manage /proc file with inodes.
+The main concern is to use advanced functions, like permissions.
 
-In Linux, there is a standard mechanism for file system registration. Since every file system has to have its own functions to handle inode and file operations, there is a special structure to hold pointers to all those functions, struct \textbf{inode\_operations}, which includes a pointer to struct proc\_ops.
+In Linux, there is a standard mechanism for file system registration.
+Since every file system has to have its own functions to handle inode and file operations, there is a special structure to hold pointers to all those functions, struct \textbf{inode\_operations}, which includes a pointer to struct proc\_ops.
 
 The difference between file and inode operations is that file operations deal with the file itself whereas inode operations deal with ways of referencing the file, such as creating links to it.
 
-In /proc, whenever we register a new file, we're allowed to specify which struct inode\_operations will be used to access to it. This is the mechanism we use, a struct inode\_operations which includes a pointer to a struct proc\_ops which includes pointers to our procfs\_read and procfs\_write functions.
+In /proc, whenever we register a new file, we're allowed to specify which struct inode\_operations will be used to access to it.
+This is the mechanism we use, a struct inode\_operations which includes a pointer to a struct proc\_ops which includes pointers to our procfs\_read and procfs\_write functions.
 
-Another interesting point here is the module\_permission function. This function is called whenever a process tries to do something with the /proc file, and it can decide whether to allow access or not. Right now it is only based on the operation and the uid of the current user (as available in current, a pointer to a structure which includes information on the currently running process), but it could be based on anything we like, such as what other processes are doing with the same file, the time of day, or the last input we received.
+Another interesting point here is the \verb|module_permission| function.
+This function is called whenever a process tries to do something with the /proc file, and it can decide whether to allow access or not.
+Right now it is only based on the operation and the uid of the current user (as available in current, a pointer to a structure which includes information on the currently running process), but it could be based on anything we like, such as what other processes are doing with the same file, the time of day, or the last input we received.
 
-It's important to note that the standard roles of read and write are reversed in the kernel. Read functions are used for output, whereas write functions are used for input. The reason for that is that read and write refer to the user's point of view --- if a process reads something from the kernel, then the kernel needs to output it, and if a process writes something to the kernel, then the kernel receives it as input.
+It is important to note that the standard roles of read and write are reversed in the kernel.
+Read functions are used for output, whereas write functions are used for input.
+The reason for that is that read and write refer to the user's point of view --- if a process reads something from the kernel, then the kernel needs to output it, and if a process writes something to the kernel, then the kernel receives it as input.
 
 \samplec{examples/procfs3.c}
 
-Still hungry for procfs examples? Well, first of all keep in mind, there are rumors around, claiming that procfs is on it's way out, consider using sysfs instead. Second, if you really can't get enough, there's a highly recommendable bonus level for procfs below linux/Documentation/DocBook/ . Use make help in your toplevel kernel directory for instructions about how to convert it into your favourite format. Example: make htmldocs . Consider using this mechanism, in case you want to document something kernel related yourself.
+Still hungry for procfs examples?
+Well, first of all keep in mind, there are rumors around, claiming that procfs is on its way out, consider using \verb|sysfs| instead.
+Consider using this mechanism, in case you want to document something kernel related yourself.
 
 \subsection{Manage /proc file with seq\_file}
-\label{sec:orgf5ad3c9}
-As we have seen, writing a /proc file may be quite "complex". So to help
-people writting /proc file, there is an API named seq\_file that helps
-formating a /proc file for output. It's based on sequence, which is composed of 3 functions: start(), next(), and stop(). The seq\_file API starts a sequence when a user read the /proc file.
+\label{sec:manage_procfs_with_seq_file}
+As we have seen, writing a /proc file may be quite ``complex''.
+So to help people writting /proc file, there is an API named \verb|seq_file| that helps formating a /proc file for output.
+It is based on sequence, which is composed of 3 functions: start(), next(), and stop().
+The \verb|seq_file| API starts a sequence when a user read the /proc file.
 
-A sequence begins with the call of the function start(). If the return is a
-non NULL value, the function next() is called. This function is an iterator, the goal is to go thought all the data. Each time next() is called, the function show() is also called. It writes data values in the buffer read by the user. The function next() is called until it returns NULL. The sequence ends when next() returns NULL, then the function stop() is called.
+A sequence begins with the call of the function start().
+If the return is a non NULL value, the function next() is called.
+This function is an iterator, the goal is to go through all the data.
+Each time next() is called, the function show() is also called.
+It writes data values in the buffer read by the user.
+The function next() is called until it returns NULL.
+The sequence ends when next() returns NULL, then the function stop() is called.
 
-BE CAREFUL: when a sequence is finished, another one starts. That means that at the end of function stop(), the function start() is called again. This loop finishes when the function start() returns NULL. You can see a scheme of this in the figure "How seq\_file works".
+BE CAREFUL: when a sequence is finished, another one starts.
+That means that at the end of function stop(), the function start() is called again.
+This loop finishes when the function start() returns NULL.
+You can see a scheme of this in the Figure~\ref{img:seqfile}.
 
-\begin{center}
+\begin{figure}
+  \center
   \begin{tikzpicture}[node distance=2cm, thick]
     \node (start) [startstop] {start() treatment};
     \node (branch1) [decision, below of=start, yshift=-1cm] {return is NULL?};
@@ -869,26 +1041,30 @@ BE CAREFUL: when a sequence is finished, another one starts. That means that at 
     \draw [->] (branch2) -- node[left=2em, anchor=south] {Yes} (stop);
     \draw [->] (stop.west) to [out=135, in=-135] node [left] {} (start.west);
   \end{tikzpicture}
-\end{center}
+  \caption{How seq\_file works}
+  \label{img:seqfile}
+\end{figure}
 
-Seq\_file provides basic functions for proc\_ops, as seq\_read, seq\_lseek, and some others. But nothing to write in the /proc file. Of course, you can still use the same way as in the previous example.
+The \verb|seq_file| provides basic functions for \verb|proc_ops|, such as seq\_read, seq\_lseek, and some others.
+But nothing to write in the /proc file.
+Of course, you can still use the same way as in the previous example.
 
 \samplec{examples/procfs4.c}
 
 If you want more information, you can read this web page:
 
 \begin{itemize}
-\item \url{http://lwn.net/Articles/22355/}
-
-\item \url{http://www.kernelnewbies.org/documents/seq\_file\_howto.txt}
+  \item \url{http://lwn.net/Articles/22355/}
+  \item \url{https://kernelnewbies.org/Documents/SeqFileHowTo}
 \end{itemize}
-
 
 You can also read the code of fs/seq\_file.c in the linux kernel.
 
 \section{sysfs: Interacting with your module}
-\label{sec:orgdb0ef18}
-\emph{sysfs} allows you to interact with the running kernel from userspace by reading or setting variables inside of modules. This can be useful for debugging purposes, or just as an interface for applications or scripts. You can find sysfs directories and files under the \emph{sys} directory on your system.
+\label{sec:sysfs}
+\emph{sysfs} allows you to interact with the running kernel from userspace by reading or setting variables inside of modules.
+This can be useful for debugging purposes, or just as an interface for applications or scripts.
+You can find sysfs directories and files under the \emph{sys} directory on your system.
 
 \begin{codebash}
 ls -l /sys
@@ -931,18 +1107,32 @@ sudo rmmod hello_sysfs
 \end{codebash}
 
 \section{Talking To Device Files}
-\label{sec:org4566b36}
-Device files are supposed to represent physical devices. Most physical devices are used for output as well as input, so there has to be some mechanism for device drivers in the kernel to get the output to send to the device from processes. This is done by opening the device file for output and writing to it, just like writing to a file. In the following example, this is implemented by device\_write.
+\label{sec:device_files}
+Device files are supposed to represent physical devices.
+Most physical devices are used for output as well as input, so there has to be some mechanism for device drivers in the kernel to get the output to send to the device from processes.
+This is done by opening the device file for output and writing to it, just like writing to a file.
+In the following example, this is implemented by device\_write.
 
-This is not always enough. Imagine you had a serial port connected to a modem (even if you have an internal modem, it is still implemented from the CPU's perspective as a serial port connected to a modem, so you don't have to tax your imagination too hard). The natural thing to do would be to use the device file to write things to the modem (either modem commands or data to be sent through the phone line) and read things from the modem (either responses for commands or the data received through the phone line). However, this leaves open the question of what to do when you need to talk to the serial port itself, for example to send the rate at which data is sent and received.
+This is not always enough.
+Imagine you had a serial port connected to a modem (even if you have an internal modem, it is still implemented from the CPU's perspective as a serial port connected to a modem, so you don't have to tax your imagination too hard).
+The natural thing to do would be to use the device file to write things to the modem (either modem commands or data to be sent through the phone line) and read things from the modem (either responses for commands or the data received through the phone line).
+However, this leaves open the question of what to do when you need to talk to the serial port itself, for example to send the rate at which data is sent and received.
 
-The answer in Unix is to use a special function called \textbf{ioctl} (short for Input Output ConTroL). Every device can have its own ioctl commands, which can be read ioctl's (to send information from a process to the kernel), write ioctl's (to return information to a process), both or neither. Notice here the roles of read and write are reversed again, so in ioctl's read is to send information to the kernel and write is to receive information from the kernel.
+The answer in Unix is to use a special function called \textbf{ioctl} (short for Input Output ConTroL).
+Every device can have its own ioctl commands, which can be read ioctl's (to send information from a process to the kernel), write ioctl's (to return information to a process), both or neither.
+Notice here the roles of read and write are reversed again, so in ioctl's read is to send information to the kernel and write is to receive information from the kernel.
 
-The ioctl function is called with three parameters: the file descriptor of the appropriate device file, the ioctl number, and a parameter, which is of type long so you can use a cast to use it to pass anything. You won't be able to pass a structure this way, but you will be able to pass a pointer to the structure.
+The ioctl function is called with three parameters: the file descriptor of the appropriate device file, the ioctl number, and a parameter, which is of type long so you can use a cast to use it to pass anything.
+You will not be able to pass a structure this way, but you will be able to pass a pointer to the structure.
 
-The ioctl number encodes the major device number, the type of the ioctl, the command, and the type of the parameter. This ioctl number is usually created by a macro call (\_IO, \_IOR, \_IOW or \_IOWR --- depending on the type) in a header file. This header file should then be included both by the programs which will use ioctl (so they can generate the appropriate ioctl's) and by the kernel module (so it can understand it). In the example below, the header file is chardev.h and the program which uses it is ioctl.c.
+The ioctl number encodes the major device number, the type of the ioctl, the command, and the type of the parameter.
+This ioctl number is usually created by a macro call (\_IO, \_IOR, \_IOW or \_IOWR --- depending on the type) in a header file.
+This header file should then be included both by the programs which will use ioctl (so they can generate the appropriate ioctl's) and by the kernel module (so it can understand it).
+In the example below, the header file is chardev.h and the program which uses it is ioctl.c.
 
-If you want to use ioctls in your own kernel modules, it is best to receive an official ioctl assignment, so if you accidentally get somebody else's ioctls, or if they get yours, you'll know something is wrong. For more information, consult the kernel source tree at Documentation/ioctl-number.txt.
+If you want to use ioctls in your own kernel modules, it is best to receive an official ioctl assignment, so if you accidentally get somebody else's ioctls, or if they get yours, you'll know something is wrong.
+% FIXME: use the right entry about ioctl assignment
+For more information, consult the kernel source tree at Documentation/ioctl-number.txt.
 
 \samplec{examples/chardev2.c}
 
@@ -951,28 +1141,74 @@ If you want to use ioctls in your own kernel modules, it is best to receive an o
 \samplec{examples/ioctl.c}
 
 \section{System Calls}
-\label{sec:orga925e22}
-So far, the only thing we've done was to use well defined kernel mechanisms to register \textbf{/proc} files and device handlers. This is fine if you want to do something the kernel programmers thought you'd want, such as write a device driver. But what if you want to do something unusual, to change the behavior of the system in some way? Then, you're mostly on your own.
+\label{sec:syscall}
+So far, the only thing we've done was to use well defined kernel mechanisms to register \textbf{/proc} files and device handlers.
+This is fine if you want to do something the kernel programmers thought you'd want, such as write a device driver.
+But what if you want to do something unusual, to change the behavior of the system in some way?
+Then, you are mostly on your own.
 
-If you're not being sensible and using a virtual machine then this is where kernel programming can become hazardous. While writing the example below, I killed the \textbf{open()} system call. This meant I couldn't open any files, I couldn't run any programs, and I couldn't shutdown the system. I had to restart the virtual machine. No important files got anihilated, but if I was doing this on some live mission critical system then that could have been a possible outcome. To ensure you don't lose any files, even within a test environment, please run \textbf{sync} right before you do the \textbf{insmod} and the \textbf{rmmod}.
+If you are not being sensible and using a virtual machine then this is where kernel programming can become hazardous.
+While writing the example below, I killed the \textbf{open()} system call.
+This meant I could not open any files, I could not run any programs, and I could not shutdown the system.
+I had to restart the virtual machine.
+No important files got anihilated, but if I was doing this on some live mission critical system then that could have been a possible outcome.
+To ensure you do not lose any files, even within a test environment, please run \textbf{sync} right before you do the \textbf{insmod} and the \textbf{rmmod}.
 
-Forget about \textbf{/proc} files, forget about device files. They're just minor details. Minutiae in the vast expanse of the universe. The real process to kernel communication mechanism, the one used by all processes, is \emph{system calls}. When a process requests a service from the kernel (such as opening a file, forking to a new process, or requesting more memory), this is the mechanism used. If you want to change the behaviour of the kernel in interesting ways, this is the place to do it. By the way, if you want to see which system calls a program uses, run \textbf{strace <arguments>}.
+Forget about \textbf{/proc} files, forget about device files.
+They are just minor details.
+Minutiae in the vast expanse of the universe.
+The real process to kernel communication mechanism, the one used by all processes, is \emph{system calls}.
+When a process requests a service from the kernel (such as opening a file, forking to a new process, or requesting more memory), this is the mechanism used.
+If you want to change the behaviour of the kernel in interesting ways, this is the place to do it.
+By the way, if you want to see which system calls a program uses, run \verb|strace <arguments>|.
 
-In general, a process is not supposed to be able to access the kernel. It can't access kernel memory and it can't call kernel functions. The hardware of the CPU enforces this (that's the reason why it's called `protected mode' or 'page protection').
+In general, a process is not supposed to be able to access the kernel.
+It can not access kernel memory and it can't call kernel functions.
+The hardware of the CPU enforces this (that is the reason why it is called ``protected mode'' or ``page protection'').
 
-System calls are an exception to this general rule. What happens is that the process fills the registers with the appropriate values and then calls a special instruction which jumps to a previously defined location in the kernel (of course, that location is readable by user processes, it is not writable by them). Under Intel CPUs, this is done by means of interrupt 0x80. The hardware knows that once you jump to this location, you are no longer running in restricted user mode, but as the operating system kernel --- and therefore you're allowed to do whatever you want.
+System calls are an exception to this general rule.
+What happens is that the process fills the registers with the appropriate values and then calls a special instruction which jumps to a previously defined location in the kernel (of course, that location is readable by user processes, it is not writable by them).
+Under Intel CPUs, this is done by means of interrupt 0x80. The hardware knows that once you jump to this location, you are no longer running in restricted user mode, but as the operating system kernel --- and therefore you're allowed to do whatever you want.
 
-The location in the kernel a process can jump to is called system\_call. The procedure at that location checks the system call number, which tells the kernel what service the process requested. Then, it looks at the table of system calls (sys\_call\_table) to see the address of the kernel function to call. Then it calls the function, and after it returns, does a few system checks and then return back to the process (or to a different process, if the process time ran out). If you want to read this code, it's at the source file arch/\$<\(architecture\)>\$/kernel/entry.S, after the line ENTRY(system\_call).
+% FIXME: recent kernel changes the system call entries
+The location in the kernel a process can jump to is called \verb|system_call|.
+The procedure at that location checks the system call number, which tells the kernel what service the process requested.
+Then, it looks at the table of system calls (\verb|sys_call_table|) to see the address of the kernel function to call.
+Then it calls the function, and after it returns, does a few system checks and then return back to the process (or to a different process, if the process time ran out).
+If you want to read this code, it is at the source file \verb|arch/$(architecture)/kernel/entry.S|, after the line \verb|ENTRY(system_call)|.
 
-So, if we want to change the way a certain system call works, what we need to do is to write our own function to implement it (usually by adding a bit of our own code, and then calling the original function) and then change the pointer at sys\_call\_table to point to our function. Because we might be removed later and we don't want to leave the system in an unstable state, it's important for cleanup\_module to restore the table to its original state.
+So, if we want to change the way a certain system call works, what we need to do is to write our own function to implement it (usually by adding a bit of our own code, and then calling the original function) and then change the pointer at sys\_call\_table to point to our function.
+Because we might be removed later and we don't want to leave the system in an unstable state, it's important for cleanup\_module to restore the table to its original state.
 
-The source code here is an example of such a kernel module. We want to "spy" on a certain user, and to \textbf{pr\_info()} a message whenever that user opens a file. Towards this end, we replace the system call to open a file with our own function, called \textbf{our\_sys\_open}. This function checks the uid (user's id) of the current process, and if it's equal to the uid we spy on, it calls pr\_info() to display the name of the file to be opened. Then, either way, it calls the original open() function with the same parameters, to actually open the file.
+The source code here is an example of such a kernel module.
+We want to ``spy'' on a certain user, and to \textbf{pr\_info()} a message whenever that user opens a file.
+Towards this end, we replace the system call to open a file with our own function, called \textbf{our\_sys\_open}.
+This function checks the uid (user's id) of the current process, and if it is equal to the uid we spy on, it calls pr\_info() to display the name of the file to be opened.
+Then, either way, it calls the original open() function with the same parameters, to actually open the file.
 
-The \textbf{init\_module} function replaces the appropriate location in \textbf{sys\_call\_table} and keeps the original pointer in a variable. The cleanup\_module function uses that variable to restore everything back to normal. This approach is dangerous, because of the possibility of two kernel modules changing the same system call. Imagine we have two kernel modules, A and B. A's open system call will be A\_open and B's will be B\_open. Now, when A is inserted into the kernel, the system call is replaced with A\_open, which will call the original sys\_open when it's done. Next, B is inserted into the kernel, which replaces the system call with B\_open, which will call what it thinks is the original system call, A\_open, when it's done.
+The \textbf{init\_module} function replaces the appropriate location in \textbf{sys\_call\_table} and keeps the original pointer in a variable.
+The cleanup\_module function uses that variable to restore everything back to normal.
+This approach is dangerous, because of the possibility of two kernel modules changing the same system call.
+Imagine we have two kernel modules, A and B. A's open system call will be A\_open and B's will be B\_open.
+Now, when A is inserted into the kernel, the system call is replaced with A\_open, which will call the original sys\_open when it is done.
+Next, B is inserted into the kernel, which replaces the system call with B\_open, which will call what it thinks is the original system call, A\_open, when it's done.
 
-Now, if B is removed first, everything will be well --- it will simply restore the system call to A\_open, which calls the original. However, if A is removed and then B is removed, the system will crash. A's removal will restore the system call to the original, sys\_open, cutting B out of the loop. Then, when B is removed, it will restore the system call to what it thinks is the original, \textbf{A\_open}, which is no longer in memory. At first glance, it appears we could solve this particular problem by checking if the system call is equal to our open function and if so not changing it at all (so that B won't change the system call when it's removed), but that will cause an even worse problem. When A is removed, it sees that the system call was changed to \textbf{B\_open} so that it is no longer pointing to \textbf{A\_open}, so it won't restore it to \textbf{sys\_open} before it is removed from memory. Unfortunately, \textbf{B\_open} will still try to call \textbf{A\_open} which is no longer there, so that even without removing B the system would crash.
+Now, if B is removed first, everything will be well --- it will simply restore the system call to A\_open, which calls the original.
+However, if A is removed and then B is removed, the system will crash.
+A's removal will restore the system call to the original, sys\_open, cutting B out of the loop.
+Then, when B is removed, it will restore the system call to what it thinks is the original, \textbf{A\_open}, which is no longer in memory.
+At first glance, it appears we could solve this particular problem by checking if the system call is equal to our open function and if so not changing it at all (so that B won't change the system call when it is removed), but that will cause an even worse problem.
+When A is removed, it sees that the system call was changed to \textbf{B\_open} so that it is no longer pointing to \textbf{A\_open}, so it will not restore it to \textbf{sys\_open} before it is removed from memory.
+Unfortunately, \textbf{B\_open} will still try to call \textbf{A\_open} which is no longer there, so that even without removing B the system would crash.
 
-Note that all the related problems make syscall stealing unfeasiable for production use. In order to keep people from doing potential harmful things \textbf{sys\_call\_table} is no longer exported. This means, if you want to do something more than a mere dry run of this example, you will have to patch your current kernel in order to have sys\_call\_table exported. In the example directory you will find a README and the patch. As you can imagine, such modifications are not to be taken lightly. Do not try this on valueable systems (ie systems that you do not own - or cannot restore easily). You'll need to get the complete sourcecode of this guide as a tarball in order to get the patch and the README. Depending on your kernel version, you might even need to hand apply the patch. Still here? Well, so is this chapter. If Wyle E. Coyote was a kernel hacker, this would be the first thing he'd try. ;)
+Note that all the related problems make syscall stealing unfeasiable for production use.
+In order to keep people from doing potential harmful things \textbf{sys\_call\_table} is no longer exported.
+This means, if you want to do something more than a mere dry run of this example, you will have to patch your current kernel in order to have \verb|sys_call_table| exported.
+In the example directory you will find a README and the patch.
+As you can imagine, such modifications are not to be taken lightly.
+Do not try this on valueable systems (ie systems that you do not own - or cannot restore easily).
+You will need to get the complete sourcecode of this guide as a tarball in order to get the patch and the README.
+Depending on your kernel version, you might even need to hand apply the patch.
 
 \samplec{examples/syscall.c}
 
@@ -1006,7 +1242,7 @@ There is one more point to remember. Some times processes don't want to sleep, t
 
 \begin{verbatim}
 $ sudo insmod sleep.ko
-$ cat_noblock /proc/sleep
+$ cat_nonblock /proc/sleep
 Last input:
 $ tail -f /proc/sleep &
 Last input:
@@ -1018,18 +1254,18 @@ Last input:
 Last input:
 tail: /proc/sleep: file truncated
 [1] 6540
-$ cat_noblock /proc/sleep
+$ cat_nonblock /proc/sleep
 Open would block
 $ kill %1
 [1]+  Terminated              tail -f /proc/sleep
-$ cat_noblock /proc/sleep
+$ cat_nonblock /proc/sleep
 Last input:
 $
 \end{verbatim}
 
 \samplec{examples/sleep.c}
 
-\samplec{examples/other/cat_noblock.c}
+\samplec{examples/other/cat_nonblock.c}
 
 \subsection{Completions}
 \label{sec:orgd9f9de4}
@@ -1241,7 +1477,7 @@ If you're interested in more examples of short kernel modules then searching on 
 
 I hope I have helped you in your quest to become a better programmer, or at least to have fun through technology. And, if you do write useful kernel modules, I hope you publish them under the GPL, so I can use them too.
 
-If you'd like to contribute to this guide, notice anything glaringly wrong, or just want to add extra sarcastic remarks perhaps involving monkeys or some other kind of animal then fire an email to bob@freedombone.net and you may be able to get commit access to \url{https://code.freedombone.net/bashrc/LKMPG}.
+If you'd like to contribute to this guide or notice anything glaringly wrong, please create an issue at \url{https://github.com/sysprog21/lkmpg}.
 
 Happy hacking.
 \end{document}
